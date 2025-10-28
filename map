@@ -2,7 +2,6 @@ import math
 import networkx as nx
 import matplotlib.pyplot as plt
 
-# --- Étape 1 : Données géographiques ---
 villes = {
     "Paris": (48.8566, 2.3522),
     "Marseille": (43.2965, 5.3698),
@@ -26,9 +25,8 @@ villes = {
     "Clermont-Ferrand": (45.7772, 3.087),
 }
 
-# --- Étape 2 : Fonction distance Haversine ---
 def haversine(coord1, coord2):
-    R = 6371  # Rayon de la Terre en km
+    R = 6371 
     lat1, lon1 = map(math.radians, coord1)
     lat2, lon2 = map(math.radians, coord2)
     dlat = lat2 - lat1
@@ -38,31 +36,21 @@ def haversine(coord1, coord2):
     c = 2 * math.asin(math.sqrt(a))
     return R * c
 
-# --- Étape 3 : Construction du graphe ---
 G = nx.Graph()
 
-# Ajout des sommets
 for ville, (lat, lon) in villes.items():
-    G.add_node(ville, pos=(lon, lat))  # (lon, lat) pour un affichage carte
+    G.add_node(ville, pos=(lon, lat))
 
-# Ajout des arêtes pondérées
 for v1, (lat1, lon1) in villes.items():
     for v2, (lat2, lon2) in villes.items():
         if v1 != v2:
             dist = haversine((lat1, lon1), (lat2, lon2))
             G.add_edge(v1, v2, weight=dist)
-
-# --- Étape 4 : Affichage du graphe sur la carte de France ---
 plt.figure(figsize=(10, 10))
 pos = nx.get_node_attributes(G, 'pos')
 
-# Tracé du réseau (toutes les arêtes)
-"""nx.draw_networkx_edges(G, pos, alpha=0.2, width=0.5)"""
-
-# Tracé des sommets
 nx.draw_networkx_nodes(G, pos, node_size=100, node_color='red')
 
-# Noms des villes
 nx.draw_networkx_labels(G, pos, font_size=8, font_color='black')
 
 plt.title("Réseau des 20 principales villes françaises (distances Haversine)", fontsize=12)
