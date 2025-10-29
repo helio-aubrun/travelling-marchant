@@ -44,25 +44,91 @@ for v1, (lat1, lon1) in villes.items():
             dist = haversine((lat1, lon1), (lat2, lon2))
             G.add_edge(v1, v2, weight=dist)
 
-plt.figure(figsize=(10, 10))
+mst_G = nx.minimum_spanning_tree(G)
 
+odd_nodes = [n for n, d in mst_G.degree() if d % 2 == 1]
+
+odd_subgraph = nx.Graph()
+for i, u in enumerate(odd_nodes):
+    for j, v in enumerate(odd_nodes):
+        if u != v:
+            odd_subgraph.add_edge(u, v, weight=G[u][v]['weight'])
+
+matching = nx.algorithms.matching.min_weight_matching(odd_subgraph, weight='weight')
+matching_edges = list(matching)  
+
+fig, ax = plt.subplots(figsize=(10, 10))
 m = Basemap(projection='merc',
-            llcrnrlat=41.0, urcrnrlat=51.5,  # limites latitude
-            llcrnrlon=-5.5, urcrnrlon=9.5,   # limites longitude
-            resolution='i')
-
-m.drawcoastlines()
-m.drawcountries()
-m.drawmapboundary(fill_color='lightblue')
-m.fillcontinents(color='beige', lake_color='lightblue')
-m.drawparallels(range(42, 52, 2), labels=[1,0,0,0])
-m.drawmeridians(range(-5, 10, 3), labels=[0,0,0,1])
+            llcrnrlat=41.0, urcrnrlat=51.5,
+            llcrnrlon=-5.5, urcrnrlon=9.5,
+            resolution='i', ax=ax)
 
 pos = {v: m(lon, lat) for v, (lat, lon) in villes.items()}
 
-for ville, (x, y) in pos.items():
-    plt.plot(x, y, 'ro', markersize=5)
-    plt.text(x + 10000, y + 10000, ville, fontsize=8)
+step = 0
+steps = 4
 
-plt.title("Réseau des 20 principales villes françaises sur fond de carte (Basemap)")
+def draw_step():
+    ax.clear()
+    # Fond de carte
+    m.drawcoastlines()
+    m.drawcountries()
+    m.drawmapboundary(fill_color='lightblue')
+    m.fillcontinents(color='beige', lake_color='lightblue')
+    
+    title = ""
+    
+    edges_to_draw = []
+    odd_to_draw = []
+    matching_to_draw = []
+    
+    if step == 0:
+        edges_to_draw = G.edges()
+        title = "Graphe complet (toutes les arêtes)"
+    elif step == 1:
+        edges_to_draw = mst_G.edges()
+        title = "Arbre couvrant minimal (MST)"
+    elif step == 2:
+        edges_to_draw = mst_G.edges()
+        odd_to_draw = odd_nodes
+        title = "MST avec sommets de degré impair"
+    elif step == 3:
+        edges_to_draw = mst_G.edges()
+        odd_to_draw = odd_nodes
+        matching_to_draw = matching_edges
+        title = "MST + sommets impairs + appariement minimal"
+
+    for u, v in edges_to_draw:
+        x1, y1 = pos[u]
+        x2, y2 = pos[v]
+        ax.plot([x1, x2], [y1, y2], color='gray', linewidth=0.7, alpha=0.7)
+    
+    # Tracer les arêtes de l'appariement
+    for u, v in matching_to_draw:
+        x1, y1 = pos[u]
+        x2, y2 = pos[v]
+        ax.plot([x1, x2], [y1, y2], color='blue', linewidth=1.5, alpha=0.8)
+    
+    for ville, (x, y) in pos.items():
+        if ville in odd_to_draw:
+            ax.plot(x, y, 'ro', markersize=10)
+        else:
+            ax.plot(x, y, 'ro', markersize=5)
+        ax.text(x + 10000, y + 10000, ville, fontsize=8)
+    
+    ax.set_title(f"{title} (→ pour avancer, ← pour reculer)", fontsize=12)
+
+def on_key(event):
+    global step
+    if event.key == 'right':
+        step = (step + 1) % steps
+        draw_step()
+        plt.draw()
+    elif event.key == 'left':
+        step = (step - 1) % steps
+        draw_step()
+        plt.draw()
+
+draw_step()
+fig.canvas.mpl_connect('key_press_event', on_key)
 plt.show()
