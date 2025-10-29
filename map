@@ -53,62 +53,94 @@ for i, u in enumerate(odd_nodes):
     for j, v in enumerate(odd_nodes):
         if u != v:
             odd_subgraph.add_edge(u, v, weight=G[u][v]['weight'])
-
 matching = nx.algorithms.matching.min_weight_matching(odd_subgraph, weight='weight')
-matching_edges = list(matching)  
+matching_edges = list(matching)
+
+eulerian_G = nx.MultiGraph()
+eulerian_G.add_nodes_from(mst_G.nodes())
+eulerian_G.add_edges_from(mst_G.edges())
+for u, v in matching_edges:
+    eulerian_G.add_edge(u, v, weight=G[u][v]['weight'])
+
+eulerian_circuit = list(nx.eulerian_circuit(eulerian_G))
+
+visited = set()
+tsp_path = []
+for u, v in eulerian_circuit:
+    if u not in visited:
+        tsp_path.append(u)
+        visited.add(u)
+    if v not in visited:
+        tsp_path.append(v)
+        visited.add(v)
+tsp_path.append(tsp_path[0])
 
 fig, ax = plt.subplots(figsize=(10, 10))
 m = Basemap(projection='merc',
             llcrnrlat=41.0, urcrnrlat=51.5,
             llcrnrlon=-5.5, urcrnrlon=9.5,
             resolution='i', ax=ax)
-
 pos = {v: m(lon, lat) for v, (lat, lon) in villes.items()}
 
 step = 0
-steps = 4
+steps = 6  # on ajoute l'étape eulérien
 
 def draw_step():
     ax.clear()
-    # Fond de carte
     m.drawcoastlines()
     m.drawcountries()
     m.drawmapboundary(fill_color='lightblue')
     m.fillcontinents(color='beige', lake_color='lightblue')
     
     title = ""
-    
     edges_to_draw = []
     odd_to_draw = []
     matching_to_draw = []
+    eulerian_to_draw = []
+    tsp_edges = []
     
     if step == 0:
         edges_to_draw = G.edges()
-        title = "Graphe complet (toutes les arêtes)"
+        title = "Graphe complet"
     elif step == 1:
         edges_to_draw = mst_G.edges()
-        title = "Arbre couvrant minimal (MST)"
+        title = "MST"
     elif step == 2:
         edges_to_draw = mst_G.edges()
         odd_to_draw = odd_nodes
-        title = "MST avec sommets de degré impair"
+        title = "MST + sommets impairs"
     elif step == 3:
         edges_to_draw = mst_G.edges()
         odd_to_draw = odd_nodes
         matching_to_draw = matching_edges
-        title = "MST + sommets impairs + appariement minimal"
-
+        title = "MST + sommets impairs + matching minimal"
+    elif step == 4:
+        # Graphe eulérien : MST + matching
+        eulerian_to_draw = list(eulerian_G.edges())
+        title = "Graphe eulérien complet (MST + matching)"
+    elif step == 5:
+        tsp_edges = [(tsp_path[i], tsp_path[i+1]) for i in range(len(tsp_path)-1)]
+        title = "Circuit final approximatif (Christofides)"
+    
+    # Tracer les arêtes
     for u, v in edges_to_draw:
         x1, y1 = pos[u]
         x2, y2 = pos[v]
         ax.plot([x1, x2], [y1, y2], color='gray', linewidth=0.7, alpha=0.7)
-    
-    # Tracer les arêtes de l'appariement
     for u, v in matching_to_draw:
         x1, y1 = pos[u]
         x2, y2 = pos[v]
         ax.plot([x1, x2], [y1, y2], color='blue', linewidth=1.5, alpha=0.8)
+    for u, v in eulerian_to_draw:
+        x1, y1 = pos[u]
+        x2, y2 = pos[v]
+        ax.plot([x1, x2], [y1, y2], color='purple', linewidth=1.2, alpha=0.8)
+    for u, v in tsp_edges:
+        x1, y1 = pos[u]
+        x2, y2 = pos[v]
+        ax.plot([x1, x2], [y1, y2], color='green', linewidth=2, alpha=0.8)
     
+    # Tracer les sommets
     for ville, (x, y) in pos.items():
         if ville in odd_to_draw:
             ax.plot(x, y, 'ro', markersize=10)
@@ -116,7 +148,7 @@ def draw_step():
             ax.plot(x, y, 'ro', markersize=5)
         ax.text(x + 10000, y + 10000, ville, fontsize=8)
     
-    ax.set_title(f"{title} (→ pour avancer, ← pour reculer)", fontsize=12)
+    ax.set_title(f"{title} (→/← pour naviguer)", fontsize=12)
 
 def on_key(event):
     global step
