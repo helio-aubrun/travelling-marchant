@@ -2,21 +2,88 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
 import networkx as nx
 from christofides import *
+from time import time
+import psutil
+import os
 
 # -------------------------------
-# Préparation des graphes
+# Préparation des graphes avec monitoring
 # -------------------------------
+process = psutil.Process(os.getpid())
+memory_start = process.memory_info().rss / 1024 / 1024  # MB
+
+time_general_start = time()
+time_G_start = time()
 G = build_complete_graph(villes)
+time_G_end = time()
+time_G = time_G_end - time_G_start
+print(f"Temps de construction du graphe complet : {time_G:.6f} secondes")
+
+time_mst_start = time()
 mst_G = compute_mst(G)
+time_mst_end = time()
+time_mst = time_mst_end - time_mst_start
+print(f"Temps de calcul du MST : {time_mst:.6f} secondes")
+
+time_odd_start = time()
 odd_nodes = find_odd_nodes(mst_G)
+time_odd_end = time()
+time_odd = time_odd_end - time_odd_start
+print(f"Temps de recherche des sommets impairs : {time_odd:.6f} secondes")
+
+time_matching_start = time()
 matching_edges = compute_minimum_matching(G, odd_nodes)
+time_matching_end = time()
+time_matching = time_matching_end - time_matching_start
+print(f"Temps de calcul du matching minimum : {time_matching:.6f} secondes")
+
+time_eulerian_start = time()
 eulerian_G = build_eulerian_graph(mst_G, matching_edges, G)
+time_eulerian_end = time()
+time_eulerian = time_eulerian_end - time_eulerian_start
+print(f"Temps de construction du graphe eulérien : {time_eulerian:.6f} secondes")
+
+time_tsp_start = time()
 tsp_path = compute_tsp_path(eulerian_G)
+time_tsp_end = time()
+time_tsp = time_tsp_end - time_tsp_start
+print(f"Temps de calcul du chemin TSP approximatif : {time_tsp:.6f} secondes")
+
+time_general_end = time()
+time_total = time_general_end - time_general_start
+print(f"Temps total de l'algorithme de Christofides : {time_total:.6f} secondes")
+
+# Ressources
+memory_end = process.memory_info().rss / 1024 / 1024  # MB
+memory_used = memory_end - memory_start
+cpu_percent = process.cpu_percent(interval=0.1)
+
+print(f"\n--- Ressources ---")
+print(f"Mémoire utilisée : {memory_used:.2f} MB")
+print(f"Mémoire totale : {memory_end:.2f} MB")
+print(f"CPU : {cpu_percent:.1f}%")
+
+# Stocker les temps pour l'affichage
+timing_info = {
+    'Graphe complet': time_G,
+    'MST': time_mst,
+    'Sommets impairs': time_odd,
+    'Matching minimum': time_matching,
+    'Graphe eulérien': time_eulerian,
+    'Chemin TSP': time_tsp,
+    'TOTAL': time_total
+}
+
+resource_info = {
+    'Mémoire utilisée': f"{memory_used:.2f} MB",
+    'Mémoire totale': f"{memory_end:.2f} MB",
+    'CPU': f"{cpu_percent:.1f}%"
+}
 
 # -------------------------------
 # Visualisation interactive
 # -------------------------------
-fig, ax = plt.subplots(figsize=(10, 10))
+fig, ax = plt.subplots(figsize=(12, 10))
 m = Basemap(projection='merc',
             llcrnrlat=41.0, urcrnrlat=51.5,
             llcrnrlon=-5.5, urcrnrlon=9.5,
@@ -79,7 +146,27 @@ def draw_step():
         ax.plot(x, y, 'ro', markersize=size)
         ax.text(x + 10000, y + 10000, ville, fontsize=8)
 
-    ax.set_title(f"{title} (← / → pour naviguer)", fontsize=12)
+    ax.set_title(f"{title} (← / → pour naviguer)", fontsize=12, pad=20)
+    
+    # Ajouter les informations de temps et ressources
+    timing_text = "=== Temps d'exécution ===\n"
+    for key, value in timing_info.items():
+        if key == 'TOTAL':
+            timing_text += f"\n{key}: {value:.4f}s"
+        else:
+            timing_text += f"{key}: {value:.4f}s\n"
+    
+    resource_text = "\n\n=== Ressources ===\n"
+    for key, value in resource_info.items():
+        resource_text += f"{key}: {value}\n"
+    
+    info_text = timing_text + resource_text
+    
+    # Positionner le texte dans le coin supérieur gauche
+    ax.text(0.02, 0.98, info_text, transform=ax.transAxes,
+            fontsize=9, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+            family='monospace')
 
 def on_key(event):
     global step
