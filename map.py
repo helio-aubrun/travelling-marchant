@@ -165,7 +165,8 @@ def draw_step():
     # Positionner le texte dans le coin supérieur gauche
     ax.text(0.02, 0.98, info_text, transform=ax.transAxes,
             fontsize=9, verticalalignment='top',
-            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+            bbox=dict(boxstyle='round', facecolor='white', alpha=1),
+    
             family='monospace')
 
 def on_key(event):
