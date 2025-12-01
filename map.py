@@ -1,7 +1,10 @@
+# filepath: map.py
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
 from mpl_toolkits.basemap import Basemap
 import networkx as nx
 from christofides import *
+from genetique import *
 from time import time
 import psutil
 import os
@@ -92,7 +95,101 @@ m = Basemap(projection='merc',
 pos = {v: m(lon, lat) for v, (lat, lon) in villes.items()}
 
 step = 0
-steps = 6  # 0→5 : les 6 étapes
+steps = 6
+
+# -------------------------------
+# Algorithme génétique : configuration et exécution
+# -------------------------------
+ga_cfg = GAConfig(population_size=320, generations=600, mutation_rate=0.18,
+                  mutation_op="inversion", seed=7, patience=140)
+ga_path, ga_best_km, ga_history = run_ga_tsp(villes, ga_cfg)
+
+def _dist(path, cities):
+    return sum(haversine(cities[path[i]], cities[path[i+1]]) for i in range(len(path)-1))
+
+christofides_km = _dist(tsp_path, villes)
+
+# -------------------------------
+# Algorithme génétique : état UI et helpers
+# -------------------------------
+gen_mode, ga_step, GA_STEPS = False, 0, 3
+edges = lambda p: [(p[i], p[i+1]) for i in range(len(p)-1)]
+eset  = lambda p: {frozenset((p[i], p[i+1])) for i in range(len(p)-1)}
+
+def _cities():
+    for city, (x, y) in pos.items():
+        ax.plot(x, y, 'ro', markersize=5)
+        ax.text(x+10000, y+10000, city, fontsize=8)
+
+def _text(x, y, s, right=False):
+    ax.text(x, y, s, transform=ax.transAxes, fontsize=9,
+            va='top', ha='right' if right else 'left',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=1),
+            family='monospace')
+
+def _ga_params_text():
+    return (f"=== Paramètres GA ===\nPop: {ga_cfg.population_size}\nGen: {ga_cfg.generations}\n"
+            f"Tournoi k: {ga_cfg.tournament_k}\nOX: {ga_cfg.crossover_rate}\n"
+            f"Mutation: {ga_cfg.mutation_rate} ({ga_cfg.mutation_op})\n"
+            f"Élitisme: {ga_cfg.elitism}\nPatience: {ga_cfg.patience}\nSeed: {ga_cfg.seed}")
+
+def _ga_prog_text():
+    if not ga_history: return ""
+    a, z = ga_history[0], ga_history[-1]
+    mid = ga_history[len(ga_history)//2]
+    gain = (a - z) / a * 100 if a > 0 else 0
+    return (f"=== Progression GA ===\nDépart: {a:.1f} km\nMi: {mid:.1f} km\n"
+            f"Final: {z:.1f} km\nGain: {gain:.1f}%")
+
+def _ga_vs_ch_text():
+    ch, ga = eset(tsp_path), eset(ga_path)
+    common = ch & ga
+    ch_only = ch - ga
+    ga_only = ga - ch
+    diff_km = ga_best_km - christofides_km
+    rel = (diff_km / christofides_km * 100) if christofides_km > 0 else 0.0
+    sign = "+" if diff_km >= 0 else ""
+    return (
+        "=== Comparaison GA vs Christofides ===\n"
+        f"Christofides: {christofides_km:.1f} km\n"
+        f"GA: {ga_best_km:.1f} km\n"
+        f"Δ distance: {sign}{diff_km:.1f} km ({sign}{rel:.1f}%)\n"
+        f"Arêtes communes: {len(common)}\n"
+        f"Uniq. Christofides: {len(ch_only)}\n"
+        f"Uniq. GA: {len(ga_only)}"
+    )
+
+def _draw_ga(mode: int):
+    _cities()
+    if mode == 0:
+        _text(0.02, 0.98, _ga_params_text())
+        ax.set_title("Algorithme Génétique — paramètres (← / →)", fontsize=12, pad=20); return
+    if mode == 1:
+        for u, v in edges(ga_path):
+            x1, y1 = pos[u]; x2, y2 = pos[v]
+            ax.plot([x1, x2], [y1, y2], color='orange', lw=2.5, alpha=0.95, ls='--')
+        _text(0.02, 0.98, _ga_params_text())
+        _text(0.98, 0.98, _ga_prog_text(), right=True)
+        ax.set_title(f"Algorithme Génétique — meilleur circuit ({ga_best_km:.1f} km)", fontsize=12, pad=20); return
+    ch, ga = eset(tsp_path), eset(ga_path)
+    common, ch_only, ga_only = ch & ga, ch - ga, ga - ch
+    for e in common:
+        u, v = tuple(e); x1, y1 = pos[u]; x2, y2 = pos[v]
+        ax.plot([x1, x2], [y1, y2], color='gray', lw=0.8, alpha=0.6)
+    for u, v in (tuple(e) for e in ch_only):
+        x1, y1 = pos[u]; x2, y2 = pos[v]
+        ax.plot([x1, x2], [y1, y2], color='green', lw=2.5, alpha=0.95)
+    for u, v in (tuple(e) for e in ga_only):
+        x1, y1 = pos[u]; x2, y2 = pos[v]
+        ax.plot([x1, x2], [y1, y2], color='orange', lw=2.5, alpha=0.95, ls='--')
+    from matplotlib.lines import Line2D
+    ax.legend([Line2D([0],[0],color='green',lw=3,label='Christofides'),
+               Line2D([0],[0],color='orange',lw=3,ls='--',label='GA'),
+               Line2D([0],[0],color='gray',lw=1,label='Commun')],
+              ['Uniquement Christofides','Uniquement GA','Commun'], loc='lower left')
+    _text(0.02, 0.98, _ga_vs_ch_text())
+    ax.set_title(f"Comparaison GA vs Christofides — GA: {ga_best_km:.1f} km | Christofides: {christofides_km:.1f} km",
+                 fontsize=12, pad=20)
 
 def draw_step():
     ax.clear()
@@ -103,6 +200,9 @@ def draw_step():
 
     title = ""
     odd_to_draw, edges_to_draw, matching_to_draw, eulerian_to_draw, tsp_edges = [], [], [], [], []
+
+    if gen_mode:
+        _draw_ga(ga_step); return
 
     if step == 0:
         edges_to_draw = G.edges()
@@ -162,7 +262,6 @@ def draw_step():
     
     info_text = timing_text + resource_text
     
-    # Positionner le texte dans le coin supérieur gauche
     ax.text(0.02, 0.98, info_text, transform=ax.transAxes,
             fontsize=9, verticalalignment='top',
             bbox=dict(boxstyle='round', facecolor='white', alpha=1),
@@ -170,15 +269,35 @@ def draw_step():
             family='monospace')
 
 def on_key(event):
-    global step
-    if event.key == 'right':
-        step = (step + 1) % steps
-        draw_step()
-        plt.draw()
-    elif event.key == 'left':
-        step = (step - 1) % steps
-        draw_step()
-        plt.draw()
+    global step, ga_step
+    if gen_mode:
+        if event.key == 'right':
+            ga_step = (ga_step + 1) % GA_STEPS
+            draw_step()
+            plt.draw()
+        elif event.key == 'left':
+            ga_step = (ga_step - 1) % GA_STEPS
+            draw_step()
+            plt.draw()
+    else:
+        if event.key == 'right':
+            step = (step + 1) % steps
+            draw_step()
+            plt.draw()
+        elif event.key == 'left':
+            step = (step - 1) % steps
+            draw_step()
+            plt.draw()
+
+def on_toggle_gen(_):
+    gen_mode_list = globals()
+    gen_mode_list['gen_mode'], gen_mode_list['ga_step'] = (not gen_mode_list['gen_mode']), 0
+    btn.label.set_text('Retour Christofides' if gen_mode_list['gen_mode'] else 'Génétique')
+    draw_step(); plt.draw()
+
+btn_ax = plt.axes([0.72, 0.02, 0.26, 0.06])
+btn = Button(btn_ax, 'Génétique')
+btn.on_clicked(on_toggle_gen)
 
 draw_step()
 fig.canvas.mpl_connect('key_press_event', on_key)
